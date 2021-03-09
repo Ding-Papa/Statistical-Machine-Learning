@@ -1,0 +1,204 @@
+---
+title: "Statistical Learning HW4"
+author: "Ding Zepeng,18307110088"
+date: "2020/11/1"
+output:
+   html_document:
+     toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Section 1: 证明题
+
+## (1):
+![](1.jpg)
+
+## (2):
+![](2.jpg)
+
+```{r}
+# rm(list = ls())
+
+# odds函数计算p(x_i,β)
+odds <- function(x, beta){
+  expo <- exp(x %*% beta)
+  return(expo/(1+expo))
+}
+
+# 构建牛顿法的迭代函数, N为X1、X2维数，beta为给定的true parameter，R为估计的轮数
+NRiter <- function(N, beta, R){
+  best <- matrix(nrow = R,ncol = length(beta))   # 存储R轮的每次最大似然法估计出的值
+  for(r in 1:R){
+    ones <- rep(1, N)
+    X1 <- rnorm(N)
+    X2 <- rnorm(N)
+    X <- matrix(c(ones, X1, X2), ncol = 3)
+    y <- odds(X, beta)     # 构建因变量y,表示Y=1的概率值
+    bold <- c(0,0,0)
+    while(1){                # Newton-Raphson Algorithm ,矩阵形式
+      pro <- odds(X, bold)
+      W <- diag(c(pro*(1-pro)))
+      Wi <- solve(t(X) %*% W %*% X)
+      bnew <- bold + Wi %*% t(X) %*% (y - pro)
+      if(max(abs(bnew-bold)) < 1e-5){break}
+      bold <- bnew
+    }
+    best[r,] <- bold
+  }
+  return(best)
+}
+
+# 分别对N=200，500，800，1000进行系数估计
+beta = c(0.5,1.2,-1)    # 真实的beta
+# N=200
+b1 <- NRiter(200,beta,200)
+head(b1)
+# N=500
+b2 <- NRiter(500,beta,200)
+head(b2)
+# N=800
+b3 <- NRiter(800,beta,200)
+head(b3)
+# N=1000
+b4 <- NRiter(1000,beta,200)
+head(b4)
+
+# 对估计出的beta的各分量与真实值的差作箱线图，放到一起便于比较：
+# beta_1
+par(mfrow = c(1,4))
+boxplot(b1[,1] - beta[1], ylab = "β1^hat - β1", xlab = "N=200", col = "blue")
+boxplot(b2[,1] - beta[1], ylab = "β1^hat - β1", xlab = "N=500", col = "blue")
+boxplot(b3[,1] - beta[1], ylab = "β1^hat - β1", xlab = "N=800", col = "blue")
+boxplot(b4[,1] - beta[1], ylab = "β1^hat - β1", xlab = "N=1000", col = "blue")
+# beta_2
+par(mfrow = c(1,4))
+boxplot(b1[,2] - beta[2], ylab = "β2^hat - β2", xlab = "N=200", col = "blue")
+boxplot(b2[,2] - beta[2], ylab = "β2^hat - β2", xlab = "N=500", col = "blue")
+boxplot(b3[,2] - beta[2], ylab = "β2^hat - β2", xlab = "N=800", col = "blue")
+boxplot(b4[,2] - beta[2], ylab = "β2^hat - β2", xlab = "N=1000", col = "blue")
+# beta_3
+par(mfrow = c(1,4))
+boxplot(b1[,3] - beta[3], ylab = "β3^hat - β3", xlab = "N=200", col = "blue")
+boxplot(b2[,3] - beta[3], ylab = "β3^hat - β3", xlab = "N=500", col = "blue")
+boxplot(b3[,3] - beta[3], ylab = "β3^hat - β3", xlab = "N=800", col = "blue")
+boxplot(b4[,3] - beta[3], ylab = "β3^hat - β3", xlab = "N=1000", col = "blue")
+```
+
++ 由结果可以看出，N越大，估计量本身的方差越小，即越稳定（体现在box纵向宽度变窄）
++ [注]：beta的第三个分量是负值，而题目仅要求作差来衡量误差而并未要求取绝对值，所以其”箱线图趋势“与前两个分量相反
+
+## (3):
+![](3.jpg)
+
+
+# Section 2: 客户流失预警分析
+
+## 1. 读入训练数据及数据清洗
+
+```{r}
+Sdata <- read.csv("sampledata.csv", header = T)   # 读入CSV文件
+# 使用subset函数筛选合理的数据;删去ID列
+Sdata <- subset(Sdata[,2:9], (Sdata$expense>=0) & (Sdata$degree>=0) & (Sdata$tightness>=0) )
+head(Sdata)
+summary(Sdata)   # 对数据进行总结
+```
++ 可以通过比较median和mean粗略判断自变量右偏程度
+<br>
+
+## 2. 绘制因变量与各自变量箱线图
+
++ 因变量与各个自变量的箱线图如下所示：<br>
+
++ [注] 个体花费变化、个体度变化右偏，但存在负值，因此取绝对值后对数化（同时放上原箱线图以供对比）
+
+```{r}
+par(mfrow = c(3,3),pin = c(1,1))
+boxplot(log(Sdata$tenure) ~ Sdata$churn, ylab = "对数化在网时长", xlab = "是否流失", col = c("blue","red"))
+boxplot(Sdata$expense ~ Sdata$churn, ylab = "当月花费", xlab = "是否流失", col = c("blue","red"))
+boxplot(log(Sdata$degree) ~ Sdata$churn, ylab = "对数化个体的度", xlab = "是否流失", col = c("blue","red"))
+boxplot(log(Sdata$tightness) ~ Sdata$churn, ylab = "对数化联系强度", xlab = "是否流失", col = c("blue","red"))
+boxplot(Sdata$entropy ~ Sdata$churn, ylab = "个体信息熵", xlab = "是否流失", col = c("blue","red"))
+boxplot(Sdata$chgexpense ~ Sdata$churn, ylab = "个体花费变化", xlab = "是否流失", col = c("blue","red"))
+boxplot(log(abs(Sdata$chgexpense)) ~ Sdata$churn, ylab = "对数化个体花费变化（绝对值）", xlab = "是否流失", col = c("blue","red"))
+boxplot(Sdata$chgdegree ~ Sdata$churn, ylab = "个体度变化", xlab = "是否流失", col = c("blue","red"))
+boxplot(log(abs(Sdata$chgdegree)) ~ Sdata$churn, ylab = "对数化个体度变化（绝对值）", xlab = "是否流失", col = c("blue","red"))
+```
+<br>
++ 可以看到，流失用户的这七项指标与未流失用户的相应指标均有较为明显的差别
+<br>
+
+## 3. 对自变量进行标准化、建立逻辑回归模型
+
+```{r}
+## 用scale()函数进行自变量标准化
+Sdata1 <- data.frame(scale(Sdata[,-8]))
+Sdata1$churn <- Sdata$churn
+
+## 建立逻辑回归模型
+glm.fit1 <- glm(churn ~ ., data = Sdata1, family = binomial(link = "logit"))
+summary(glm.fit1)
+library(knitr)
+knitr::kable(summary(glm.fit1)$coef)      # 展示系数的估计结果
+
+```
+
++ 系数估计结果解读：从回归结果可以看出，各解释变量的系数均为负值；在逻辑回归中，若系数为负,则说明这个特征与目标值为0的概率正相关，也就是说本例中该解释变量对于用户流失有负相关的关系，其他条件不变时，解释变量的值越大，则用户越不容易流失（流失的概率越小）。<br>
++ 此外，解释变量的系数绝对值越大，则说明该解释变量“越重要”，即改变一单位该解释变量的值对于预测值（流失的概率）的影响越大。在本例中，可以看出degree对于预测值（流失的概率）影响最大，即所有考虑到的解释变量中“最能决定每个用户是否流失”的是他用此号码与其他人联系的强度，该强度越大，越不容易流失；影响最小的解释变量是chgexpense，即用户是否流失对于此用户每月花费的变化较不敏感。
++ 根据各解释变量的p值结果可以看出，其p值均小于0.001（chgexpense的p值最大，约等于0.001），即说明本例所考虑的解释变量对于用户是否流失的解释作用均比较显著。
+
+
+## 4. 对训练集和测试集进行预测
+
+```{r}
+## 对训练集进行预测
+predict1.prob <- predict.glm(glm.fit1, type = "response", newdata = Sdata1)    # 预测流失概率
+mean(predict1.prob)     # 查看预测的流失概率的均值
+pre1 <- 1*(predict1.prob > mean(Sdata1$churn))   # 进行预测,类别严重不均衡因此以正反例之比作为阈值
+table(Sdata1$churn, pre1)    # 打印confusion matrix
+
+## 对测试集进行预测
+# 读入测试集数据并清洗
+Pdata <- read.csv("preddata.csv", header = T)
+# 使用subset函数筛选合理的数据;删去ID列
+Pdata <- subset(Pdata[,2:9], (Pdata$expense>=0) & (Pdata$degree>=0) & (Pdata$tightness>=0) )
+
+Pdata1 <- data.frame(scale(Pdata[,-8]))     # 进行自变量标准化
+Pdata1$churn <- Pdata$churn
+
+predict2.prob <- predict.glm(glm.fit1, type = "response", newdata = Pdata1)    # 预测流失概率
+mean(predict2.prob)     # 查看预测的流失概率的均值
+pre2 <- 1*(predict2.prob > mean(Pdata1$churn))    # 进行预测,类别严重不均衡因此以正反例之比作为阈值
+table(Pdata1$churn, pre2)    # 打印confusion matrix
+
+```
+
++ 模型在训练集/测试集得到的每个用户的流失概率值已经存储在了pre1.prob和pre2.prob中；在训练集和测试集预测的流失概率的均值相近，都为1.25%左右，与数据整体的用户流失率1.27%接近。
+
+
+## 5. 模型评价（绘制训练集、测试集上的ROC曲线、计算AUC值）
+
++ 使用R包pROC绘制ROC曲线、计算AUC值
+
+```{r}
+library(pROC)
+
+roc1 <- roc(Sdata1$churn,predict1.prob)  # 构建roc对象
+roc2 <- roc(Pdata1$churn,predict2.prob)
+
+plot(roc1, print.auc=TRUE, main="对训练集预测的ROC曲线", auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, legacy.axes = T)        #画出ROC曲线，标出坐标，并标出AUC的值
+
+plot(roc2, print.auc=TRUE, main="对测试集预测的ROC曲线", auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, legacy.axes = T)
+
+```
+
+
++ 模型评价：两条ROC曲线对应的AUC值都高于0.5（随机预测时的AUC值），说明模型的预测一定程度上是有效的，即能将大部分正例的概率预测值排在反例之前——ROC曲线和AUC值与阈值设置并无关系，主要衡量模型分类器的“将正例预测值排序在反例之前的能力”，因此从这个意义上而言本逻辑回归模型的分类效果较不错。
+但无论是在训练集还是在测试集上进行预测，AUC值均约0.77~0.79，接近于1但“又没那么接近”，且由上一小节的confusion matrix可以得知，尽管“真正的正例（流失）大多数都被预测成了正例”，但也有大量的反例（不流失）被预测成正例——这与样本类别严重不均衡也有一定的关系。总的来说，该逻辑回归模型的分类能力“效果不错（not bad）”，但也“并不特别好（not pretty）”。
+
