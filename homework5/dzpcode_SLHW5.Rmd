@@ -1,0 +1,107 @@
+---
+title: "Statistical Learning HW5"
+author: "Ding Zepeng,18307110088"
+date: "2020/11/18"
+output:
+   html_document: 
+     df_print: paged
+     toc: yes
+     toc_float: yes
+     number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Section 1: 证明题
+<br>
+
+## (1):
+![](1.jpg)
+<br>
+
+## (2):
+![](2.jpg)
+<br>
+
+# Section 2: 市长电话分析
+
+## (1) 读入数据、简要统计分析
+
++ 给定数据存在乱码等现象，更改分隔符和字符编码方式后整理到新的文件trainset1.csv和testset1.csv中进行分析
+<br>
+```{r}
+rm(list=ls())
+traindata <- read.csv("trainset1.csv", header = T)
+testdata <- read.csv("testset1.csv", header = T)
+```
+<br>
+```{r fig.height=6, fig.width=10}
+## 对各政府部门收到的投诉量进行统计，并排序后绘制柱状图
+gov <- traindata[,1]
+knitr::kable(summary(gov))  # 汇总统计
+
+barplot(sort(summary(gov), decreasing = T), main = "各政府部门接到的市民投诉量柱状图")
+
+```
+<br>
++ 观察可得：市水务集团收到的投诉量最多，大于500条、且显著高于其他单位；供热公司、运输管理局和燃气集团接到的投诉量均在300条左右，公交集团接到约200条投诉；而市房地集团和供电公司获得的投诉量很少，不足100条。
+
+
+## (2) 统计每条投诉用词数并绘制直方图：
+
+```{r}
+words <- rowSums(traindata[,-1])
+hist(words,breaks = 80,main = "每条投诉用词数分布直方图")
+```
+<br>
+
++ 分析：根据投诉用词数分布图可以看出，每条投诉用词量整体呈现**右偏趋势**，绝大部分投诉均比较简短、用词量少于30词，且在15~20词左右最为集中。当然，也有少部分投诉用词量较多，可能是投诉内容较多或者描述比较详细，甚至有一些投诉用词量超过了100词（但仅仅是极少数）。
+
+## (3) 各政府部门投诉词数箱线图:
+
+```{r fig.height=6, fig.width=10}
+# 将每条投诉的总词数与对应的政府部门组合为一个dataframe：
+boxdata <- cbind.data.frame(traindata[,1], words)
+colnames(boxdata) <- c("govdepartment", "wordnum")
+
+# 绘制箱线图
+# 绘制分组箱线图
+boxplot(boxdata$wordnum ~ boxdata$govdepartment, xlab = "政府部门", ylab = "投诉信息词汇量", main = "投诉词数-政府部门分组箱线图", col = 'blue',boxwex = 0.7)
+
+# 截去异常值后绘制，便于更好比较箱子宽度、中位数等
+boxplot(boxdata$wordnum ~ boxdata$govdepartment, xlab = "政府部门", ylab = "投诉信息词汇量", main = "投诉词数-政府部门分组箱线图(去除异常点)", col = 'blue', outline = F, boxwex = 0.7)
+```
+<br>
+分析与解读：<br>
++ 由箱线图可以看出，各部门收到投诉的词汇量中位数均小于30词（小于25词），且均存在少量的词汇量较大的异常点（尤其是水务集团、运输管理局的异常点较多，且词汇量最多的一则投诉是针对水务集团的）。也就是说，由箱线图可以看出，对每个部门而言其收到的投诉的词数分布也呈现右偏。
++ 此外，对比其中位数和箱子宽度（y轴方向宽度）可以看出：市房地集团收到投诉的词汇量中位数最大，且较为显著地高于其他部门；市供热公司收到的投诉词数分布较为集中（箱子宽度比较窄），而市房地集团和运输管理局收到投诉的词数分布较为分散（箱子宽度较宽）。
+
+## (4) 朴素贝叶斯方法建模、预测及分析:
+
+```{r}
+# 将每个词汇使用频数用“是否被使用”来替代
+traindata[, -1] <- traindata[, -1] > 0
+testdata[, -1] <- testdata[, -1] > 0
+
+# 使用e1071包中的naiveBayes()函数进行朴素贝叶斯建模
+library(e1071)
+bayes1 <- naiveBayes(单位名称 ~ ., data = traindata)
+
+# 用上述模型对测试集进行预测，并绘制混淆矩阵
+predictdata <- predict(bayes1, testdata[, -1])
+
+library(ggplot2)
+ConfusionM <- as.data.frame(table(actualclass = testdata$单位名称, predictclass = predictdata))
+ggplot(ConfusionM, aes(predictclass, actualclass)) + 
+  geom_tile(aes(fill = Freq), color = "white")  + 
+  scale_fill_gradient(low = "white", high = "orange") + 
+  geom_text(aes(label=Freq), color="black") + labs(title = '混淆矩阵')
+```
+
+<br>
++ 分析与评估：如果预测效果比较好，则混淆矩阵对角线上的元素所占“权重”应该最大，即预测正确类别的比例较大。对本模型而言，可以看到在测试集上进行预测所得的混淆矩阵，绝大部分非0元素均位于对角线，即预测正确的比例很高；预测错误的仅有三例（将一例对供电公司的投诉预测成水务集团、将两例房地集团的投诉预测成供热公司）。即，在测试集上的预测正确率为97%，说明上述朴素贝叶斯模型分类、预测的效果很好。
+
+
+

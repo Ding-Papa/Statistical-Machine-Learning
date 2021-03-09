@@ -1,0 +1,47 @@
+---
+title: "Statistical Learning HW6 proof part"
+author: "Ding Zepeng,18307110088"
+date: "2020/11/26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 第1题：
+
+![](1.jpg)
+
+# 第2题：
+
+![](2.jpg)
+
+## 第二题回归树-R生成及相关代码：
+```{r}
+x <- seq(1,10,1)
+y <- c(4.5, 4.75, 4.91, 5.34, 5.8, 7.05, 7.90, 8.23, 8.70, 9.00)
+# 可以通过如下代码计算平方误差，找出第一个最优的切分点
+#（后续切分点代码也类似，只需改一下i的range,为节省篇幅此处省略）
+sqerror <- numeric(9)
+for(i in 1:9){
+   a <- y[1:i]
+   b <- y[(i+1):10]
+   sqerror[i] <- sum((a-mean(a))^2) + sum((b-mean(b))^2)
+}
+sqerror
+
+# 构建回归树
+data0 <- data.frame(x,y)
+library(rpart)
+regretree <- rpart(y ~ ., data = data0, cp = 0.0001, minsplit = 2)   # 通过设置很小的cp参数来使其生成完整的回归树
+library(rpart.plot)
+rpart.plot(regretree)
+
+regretree2 <- rpart(y ~ ., data = data0, cp = 0.01, minsplit = 2)  # 设置适当的cp（偏差减少下界）实现剪枝
+rpart.plot(regretree2)
+```
+
+# 第3题
+
+![](3.jpg)

@@ -1,0 +1,158 @@
+---
+title: "Statistical Learning HW7 实战"
+author: "Ding Zepeng,18307110088"
+date: "2020/12/13"
+output:
+   html_document: 
+     df_print: paged
+     toc: yes
+     toc_float: yes
+     number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# 读入数据：
+
+```{r}
+rm(list=ls())
+data1 <- read.csv("simudata.csv", header = T)
+head(data1)
+```
+
+# 按要求划分训练集、测试集并用多种模型建模(ROC见下一小节)：
+
+
+```{r}
+set.seed(1234)
+# 7:3划分训练集和测试集
+sub <- sample(1:nrow(data1),round(nrow(data1)*0.7)) 
+traindata <- data1[sub,]   #取0.7的数据做训练集 
+testdata <- data1[-sub,]   #取0.3的数据做测试集
+```
+
+## 逻辑回归
+```{r}
+# 用glm构建逻辑回归模型
+logist <- glm(black ~ ., data = traindata, family = binomial(link = "logit"))
+summary(logist)
+
+# 在测试集上测试
+predval.logist <- as.numeric(predict(logist, type = "response", newdata = testdata))
+mean(predval.logist)
+
+```
+
+## kNN
+```{r}
+# 用class包的knn函数构建K近邻模型
+library(class)
+knnmodel <- knn(traindata[,-1], testdata[-1], traindata$black, k = 7)
+
+# 保存预测值
+predval.knn <- as.numeric(knnmodel) - 1
+mean(predval.knn)
+```
+
+## 决策树
+```{r}
+# 用rpart包的rpart函数构建决策树模型，用默认参数
+library(rpart)
+dtree <- rpart(black ~ ., data = traindata)
+printcp(dtree)
+
+# 在测试集上测试
+predval.dtree <- as.numeric(predict(dtree, newdata = testdata))
+mean(predval.dtree)
+
+```
+
+## Boosting模型
+```{r}
+# 利用gbm包的gbm函数实现adaboost算法，构建提升树模型
+library(gbm)
+adbtree <- gbm(black ~ ., data = traindata, distribution = "adaboost")  # 默认参数
+summary(adbtree)
+
+# 在测试集上测试
+predval.adbtree <- as.numeric(predict(adbtree, type = "response", newdata = testdata))
+mean(predval.adbtree)
+```
+
+## 随机森林
+```{r}
+# 使用RandomForest包构建随机森林模型
+library(randomForest)
+forest <- randomForest(as.factor(black) ~ ., data = traindata)
+varImpPlot(forest)
+
+# 在测试集上测试
+predval.forest <- as.numeric(predict(forest, type = "response", newdata = testdata)) - 1
+mean(predval.forest)
+
+```
+
+
+## SVM
+```{r}
+# 用e1071包中的svm函数构建支持向量机
+library(e1071)
+svmmod1 <- svm(black ~ ., data = traindata)   # 默认参数；高斯核
+summary(svmmod1)
+svmmod2 <- svm(black ~ ., data = traindata, type = "C-classification")   # SVM分类模型；高斯核
+summary(svmmod2)
+
+# 在测试集上测试
+predval.svm1 <- as.numeric(predict(svmmod1, newdata = testdata))
+predval.svm2 <- as.numeric(predict(svmmod2, newdata = testdata))
+```
+
+
+# 绘制各模型的ROC曲线、计算AUC值并比较：
+
+```{r}
+# ROC曲线与AUC值
+library(pROC)
+
+# 构建roc对象
+roc.logist <- roc(testdata$black, predval.logist)
+roc.knn <- roc(testdata$black, predval.knn)
+roc.dtree <- roc(testdata$black, predval.dtree)
+roc.adbtree <- roc(testdata$black, predval.adbtree)
+roc.forest <- roc(testdata$black, predval.forest)
+roc.svm1 <- roc(testdata$black, predval.svm1)
+roc.svm2 <- roc(testdata$black, predval.svm2)
+
+# 画出ROC曲线，标出坐标，并标出AUC的值
+plot(roc.logist, print.auc=TRUE, main="对测试集预测的ROC曲线(逻辑回归)", auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, legacy.axes = T)
+plot(roc.knn, print.auc=TRUE, main="对测试集预测的ROC曲线(K近邻，k=7)", auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, legacy.axes = T)
+plot(roc.dtree, print.auc=TRUE, main="对测试集预测的ROC曲线(决策树)", auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, legacy.axes = T)
+plot(roc.adbtree, print.auc=TRUE, main="对测试集预测的ROC曲线(adaboost tree)", auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, legacy.axes = T)
+plot(roc.forest, print.auc=TRUE, main="对测试集预测的ROC曲线(随机森林)", auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, legacy.axes = T)
+plot(roc.svm1, print.auc=TRUE, main="对测试集预测的ROC曲线(SVM回归，高斯核)", auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, legacy.axes = T)
+plot(roc.svm2, print.auc=TRUE, main="对测试集预测的ROC曲线(SVM分类，高斯核)", auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, legacy.axes = T)
+```
+
++ 解读与选择：首先需要说明的是，因为模型及方法不同，有些预测值是离散的（0或1）而有些是连续的（表征“概率”意义，或者说越接近1说明越可能违约）。因此做出的ROC曲线形状不同，**对于离散预测值其ROC曲线看上去“分段”明显，不连续；而对于连续预测值其ROC曲线看上去比较连续**
++ 此外，对同一个模型如SVM，选择其不同方法得到的AUC值也不同（如SVM回归eps-regression和SVM分类C-classification，前者的AUC值高于后者）。但总体而言与其他同类型（即分段型与分段型相比，连续型与连续型相比）ROC曲线相比，不同模型AUC值的**相对**大小是一样的，比如即便是SVM分类模型的AUC值也要高于决策树。
+<br>
++ 因此，从AUC值的意义上，KNN模型效果最差（几乎和随机猜测一样）；随机森林略优于单个决策树；**boosting方法、sVM和逻辑回归的AUC值都很高，这三种模型都不错**。如果非要在AUC意义上选取最优模型的话，**逻辑回归模型**效果最好。
+
+

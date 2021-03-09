@@ -1,0 +1,81 @@
+---
+title: "Statistical Learning HW6 实战"
+author: "Ding Zepeng,18307110088"
+date: "2020/11/25"
+output:
+   html_document: 
+     df_print: paged
+     toc: yes
+     toc_float: yes
+     number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. 读入数据：
+
+```{r}
+rm(list=ls())
+data1 <- read.csv("simudata.csv", header = T)
+head(data1)
+```
+
+# 2. 按要求绘制对比箱线图，并进行分析：
+
+```{r}
+par(mfrow = c(1,2))
+## 根据交易笔数绘制违约组和非违约组的对比箱线图
+boxplot(data1$billnum ~ data1$black, xlab = "是否违约", ylab = "交易笔数", main = "交易笔数-违约情况箱线图", col = 'orange',boxwex = 0.7)
+
+## 根据用户所有行为均值绘制违约组和非违约组的对比箱线图
+boxplot(data1$meanpay ~ data1$black, xlab = "是否违约", ylab = "所有行为均值", main = "所有行为均值-违约情况箱线图", col = 'orange',boxwex = 0.7)
+```
+
++ 解读：由箱线图可以看出，整体而言违约用户的交易笔数小于未违约用户（无论是从中位数，还是四分位数意义上都小于），且违约用户的交易笔数波动幅度略小于未违约用户；违约用户所有交易行为花费的**平均金额**整体上也比未违约用户少，波动幅度也较小。
++ 这与实际生活经验较为吻合，往往在某平台交易不活跃（交易笔数少）、花费平均金额少的用户更容易违约，而交易活跃、花费金额大的用户**相对不容易**违约，因为其违约带来的代价更大（或者换一种角度来看，交易活跃、花费金额较大说明该用户经济水平较高，完全有能力不违约/没必要违约）。
+
+# 3. 按要求划分训练集、测试集并进行决策树建模；绘制ROC曲线
+
+```{r}
+set.seed(1234)
+# 7:3划分训练集和测试集
+sub <- sample(1:nrow(data1),round(nrow(data1)*0.7)) 
+traindata <- data1[sub,]   #取0.7的数据做训练集 
+testdata <- data1[-sub,]   #取0.3的数据做测试集
+
+# 用rpart包的rpart函数构建决策树模型，用默认参数
+library(rpart)
+dtree<-rpart(black ~ ., data = traindata)
+printcp(dtree)
+
+# 在测试集上测试
+predval <- as.numeric(predict(dtree, newdata = testdata))
+mean(predval)
+
+# ROC曲线与AUC值
+library(pROC)
+roc1 <- roc(testdata$black, predval)  # 构建roc对象
+
+plot(roc1, print.auc=TRUE, main="对测试集预测的ROC曲线", auc.polygon=TRUE, grid=c(0.1, 0.2),
+     grid.col=c("green", "red"), max.auc.polygon=TRUE,
+     auc.polygon.col="skyblue", print.thres=TRUE, legacy.axes = T)        #画出ROC曲线，标出坐标，并标出AUC的值
+```
+
++ 分析：由ROC曲线及AUC值可以看出，由训练集用rpart函数得出的决策树（默认参数，此时method=“anova”），在测试集上预测结果的的AUC值仅0.661，预测效果一般，但优于随机分类器（AUC=0.5）；
+
++ 尝试修改rpart函数的参数为method=“class”画出分类树，但AUC更低，为0.613；篇幅原因（且题目要求用默认参数而非method=“class”）此处不展开。
+
+# 4. 画决策树图形并解读
+
+```{r fig.height=6, fig.width=8}
+library(rpart.plot)
+rpart.plot(dtree,branch=1,type=2, fallen.leaves=T,cex=0.8)
+```
+
++ 解读：决策树节点上的数值（0.19，0.24等）为该节点包含数据的（训练集的）因变量black均值，当叶节点该数值大于等于0.5时，说明其所含数据子集内违约用户多于未违约用户，可预测为“违约”。【或考虑到样本不均衡，原始数据中违约占比约0.33，因此叶节点该数值大于0.33时可预测为违约；总之，该数值越大说明预测为违约的“依据”越多，即越有可能违约】
++ rpart函数已进行适当的剪枝
++ 由决策树内节点可以看出，meanpay（所有交易行为均值）对于是否违约的划分作用最强（以该特征划分数据带来的信息增益最大），交易行为均值大于等于398000元的用户违约几率很低，这也与实际经验符合，如果一个用户其交易行为均值达到这个水平说明其经济能力已经很强了，可直接预测为非违约；其次xindaiR（信贷类Rencency）的划分能力也比较强，如果最近一次信贷类消费距今在197天以上，一定程度也说明该用户并不活跃（或一定程度反应其经济活动不频繁、经济能力没有很强），从而有较大概率违约。
++ 其余划分指标也可以类似理解，经过xindaiR划分后，如果xindaiR小于197，则可进一步通过creded（借贷比率）划分，借贷比率大于0.055时较容易违约（与实际经验相符，借贷比高意味着经济能力较差）；如果xindaiR大于等于197则可以通过zhuanzhangF（转账类频率）以及creded（借贷比率）进一步划分。
+

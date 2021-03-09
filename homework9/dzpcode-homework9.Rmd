@@ -1,0 +1,119 @@
+---
+title: "Statistical Learning HW9 实战"
+author: "Ding Zepeng,18307110088"
+date: "2020/12/22"
+output:
+   html_document: 
+     df_print: paged
+     toc: yes
+     toc_float: yes
+     number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# NBA数据分析：
+
+## 整理并读入NBA数据集：
+
++ 提前将数据文件转成csv并整理好
+
+```{r}
+rm(list=ls())
+data1 <- read.csv("NBA.csv", header = T)
+# 对变量进行标准化
+scaldata <- scale(data1[,2:19])
+rownames(scaldata)=data1[[1]]  # 数组各行名字定义为数据文件的的第一列（但都是标化后的数据）
+scaldata <- data.frame(scaldata)
+head(scaldata)
+```
+
+## 对自变量进行主成分分析：
+
+```{r}
+# 使用psych包进行主成分分析
+library(psych)
+# 做出碎石图以确定主成分个数
+fa.parallel(scaldata[,-length(scaldata)],fa='pc')
+# 也可以用scree函数：scree(scaldata[,-length(scaldata)], factors = FALSE)
+```
+
++ 可以看到，碎石图建议（如果按特征值大于1准则来选取的话）选取3个主成分，这也满足Kaiser准则的要求，即选取特征值大于1对应的主成分（即主成分y_i方差大于1），要求主成分至少能对一个变量的信息进行解释。（标准化后的数据平均每个维度所含信息量，即平均方差为1）
+
+```{r}
+# 使用princomp函数进行主成分分析
+pc1 <- princomp(scaldata[,-length(scaldata)], scores = T)
+pc1$loadings[,1:3]    # 选取前三个主成分
+```
+
++ 解读：主成分系数的**相对大小**表征了该主成分与原先某特征的相关程度、即该主成分对于原先某个特征的**解释程度**。若主成分系数相对较大，则说明该主成分对原先这个特征的解释程度大、与原先这个特征相关程度高。
++ 由本例结果（三个主成分）可以看出，第一主成分与出场数、上场总时间、命中次数、出手次数、罚球命中次数、罚球出手次数、篮板数、助攻、抢断、犯规次数**等很多特征**的相关性都比较强，与投篮率、三分投球率、罚球率等相关性较弱；第二主成分与三分命中次数、三分出手次数相关性很强；第三主成分与投篮率、三分投球率、罚球率等相关性较强。
++ 由上面相关性的结果也可以看出，原先特征中与第一主成分相关性较强的最多，也意味着第一主成分**蕴含的“解释信息”最多**，这也与碎石图中最大特征值明显高出其他的现象一致。与三个主成分相关性都不强的原先特征意味着可以通过其他特征的线性组合被较好的解释。
+
++ **注：为什么没用principal函数**：使用发现principal函数有问题，输出的系数矩阵没有标准化。查阅资料得知principal函数给出的loadings与prcomp的loadings差一个标准差倍数，principal的weights与loadings差一个方差倍数。
+
+## 计算主成分得分并解读：
+
+```{r}
+PCAscore <- pc1$scores[,1:3]
+head(PCAscore)    # 最开始的几位很牛的球员
+i <- c(100,200,500,800,1600)  # 随便选后面五位球员
+PCAscore[i,]
+```
+
++ 挑选几位球员进行解读：
++ 勒布朗.詹姆斯：这是生涯总得分最高的球员。可以看出，他的第一主成分得分很高，第二、第三主成分与第一主成分相比为较小的负值，由上面第一主成分和大多数原先特征都有一定相关性可以得知，老詹的**“各项”数据都比较强**；事实上也确实如此——第一主成分对原特征的信息概括显著强于其他主成分，老詹的第一主成分很高也解释了他极高的生涯总得分。
++ 里德.科尔：这是生涯总得分第200位的球员，可以看出与老詹相比其主成分的绝对值都小了很多，尤其是第一主成分，这也可以对他与巨星们相比“一般般”的生涯总得分进行解释。
++ 约克.拉尔瑟：这是生涯总得分比较低（查阅知仅30分）的一名球员，可以看出他的主成分绝对值明显小于前面的巨星，而且甚至第一主成分系数为负值（原来的自变量进行了标准化），说明**就其第一主成分涵盖的信息而言他的数据低于考察到的球员的相应数据的平均值**。事实上他的生涯总得分也是低于均值的，排名也在50%以后，所以其主成分信息也可以对此较好地解释。
+
+## 用PCA结果进行Kmeans聚类：
+
+```{r}
+nk=1:15
+# 对参数k进行选取
+library(fpc)
+set.seed(123)
+judge<-sapply(nk,function(k){
+      kmeans(PCAscore,centers = k)$tot.withinss     # 总的类内距离平方和
+     })
+plot(nk,judge,type = "l",xlab="number of k",ylab="within sum of squares")
+```
+<br>
++ 可以看出，k大于3后总类内距离平方和下降趋缓、k大于9后变得比较稳定，因此可以选择聚类数为3~9.下面选择**聚类数为3**进行聚类：
+
+```{r}
+km <- kmeans(PCAscore, 3)
+head(km$cluster)  # 查看最开始的牛逼球员的类别
+i <- c(100,200,500,800,1600)
+km$cluster[i]    # 随便后面几个球员查看类别
+km$centers
+```
+
++ 解读：通过比较类内距离和，用类似“碎石图”的方法选择聚类类别数为3。由结果可以看出，生涯总得分较高的“巨星”基本被分为一类、生涯总得分中等和较低的球员也基本分别被聚类；**这一方面反映了主成分对原先特征变量的概括程度（反应的信息）较全面、另一方面也反应出了聚类效果比较好**。由聚类中心也可以看出类中心距离差距还是比较大的。
+
+# 编程练习：自编PCA算法：
+
+```{r}
+# 编写PCA函数：
+PCA <- function(Dat, max.k){
+   cor1 <- cor(Dat)    # 计算样本相关矩阵
+   eigdec <- eigen(cor1)    # 进行谱分解（特征值分解）
+   pc.var <- eigdec$values[1:max.k]      # 前max.k个主成分的方差
+   pc.coef <- eigdec$vectors[,1:max.k]   # 主成分的系数矩阵
+   return(list(pc.var,pc.coef))
+}
+
+# 对NBA数据进行测试，其中max.k=10
+NBAvar <- PCA(scaldata[,-18], 10)
+NBAvar[[1]]    # 打印主成分方差
+plot(1:10, NBAvar[[1]],type = "b",main="碎石图",xlab="Component number",ylab="eigen values")
+
+```
+
++ 可以看到，画出的碎石图和上面利用psych包内函数进行主成分分析的碎石图一致，验证了自编PCA函数正确
+
+
+
+.
